@@ -1,1 +1,5 @@
 This file will add necessary information related to functionality of the whole system
+
+Function 1:
+It will perform network check. If the device is disconnected from network,
+it will periodically ping the network router until it is connected.

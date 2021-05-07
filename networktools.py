@@ -12,7 +12,7 @@ class Network:
         self.found_ap = self.scanning_for_ap()
         self.known_ssid = [ap["ssid"] for ap in NETWORK_CONFIG]
         self.target_ap = {}
-
+        self.retry = 0
 
     def scanning_for_ap(self) -> dict:
 
@@ -37,7 +37,6 @@ class Network:
 
         return ap_dict
 
-
     def recognized_ap_found(self) -> bool:
 
         found_ssid = self.found_ap.keys()
@@ -52,47 +51,53 @@ class Network:
                 }
                 return True
 
+        # If ssid is not found in known_ssid, empty the target_ap dictionary,
+        # to clean old variable
+        self.target_ap = {}
+        
         return False
-
 
     def establishing_wlan_connection(self) -> str:
 
-        retry = 0
+        self.retry = 0
 
         while True:
-            print("retry", retry)
-            if self.recognized_ap_found():
 
-                ssid = "".join(self.target_ap.keys())
-                pwd =  "".join([ap["pass"] for ap in NETWORK_CONFIG if ap["ssid"] == ssid])
-                
-                self.wlan.connect(ssid, auth=(self.target_ap[ssid]["sec"], pwd), timeout=5000)
+            try:
+                if self.recognized_ap_found():
+                    # If recognized_ap_found() returns True, target_ap dictionary is guaranteed to be filled,
+                    # i.e. not empty. Thus "ssid" and "pwd" below will not raise error and the variable 
+                    # can be safely and directly assigned
 
-                while not self.wlan.isconnected():
-                    machine.idle() # save power while waiting
+                    ssid = "".join(self.target_ap.keys())
+                    pwd =  "".join([ap["pass"] for ap in NETWORK_CONFIG if ap["ssid"] == ssid])
+                    
+                    self.wlan.connect(ssid, auth=(self.target_ap[ssid]["sec"], pwd), timeout=5000)
 
-                print("Connected to WiFi SSID with name '{}'".format(ssid))
+                    while not self.wlan.isconnected():
+                        machine.idle() # save power while waiting
 
-                return ssid
+                    print("Connected to WiFi SSID with name '{}'".format(ssid))
 
-            else:
-                retry += 1
-                self.found_ap = self.scanning_for_ap()
+                    return ssid
 
-            # If retry for 3 times and connection is still unsuccessful, hard reset the board
-            if retry == 3: machine.reset()
+                else:
+                    self.retry += 1
+                    self.found_ap = self.scanning_for_ap()
+
+                # If retry for 3 times and connection is still unsuccessful, hard reset the board
+                if self.retry == 3: machine.reset()
+
+            except Exception as e:
+                # This except section will handle TimeoutError potentially caused by wlan.connect()
+                # when it exceeds given timeout
+                print(e)
+                self.retry += 1
 
             sleep(5)
             
-
     def is_connected(self) -> bool:
         return self.wlan.isconnected()
 
-
     def mac_address(self) -> str:
-        try:
-            return hexlify(machine.unique_id()).decode().upper()
-
-        except Exception as e:
-            print("Failed to read MAC address\n{}".format(e))
-            return ''
+        return hexlify(machine.unique_id()).decode().upper()
